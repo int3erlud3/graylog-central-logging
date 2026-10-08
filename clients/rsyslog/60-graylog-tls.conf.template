@@ -1,0 +1,33 @@
+# /etc/rsyslog.d/60-graylog-tls.conf - forward all logs to Graylog over TLS.
+# Generated from clients/rsyslog/60-graylog-tls.conf.template (graylog-central-logging).
+# Requires the rsyslog TLS driver: rsyslog-gnutls (RHEL/SUSE/Debian/Ubuntu package name).
+#
+# - The server certificate is verified against the CA and its name must match the target
+#   (StreamDriverAuthMode x509/name + PermittedPeers).
+# - A disk-assisted queue keeps messages while Graylog is unreachable.
+# - RFC 5424 format keeps the application name, PID and full timestamp.
+
+global(
+  DefaultNetstreamDriver="gtls"
+  DefaultNetstreamDriverCAFile="@CA_FILE@"
+@CLIENT_CERT_LINES@)
+
+action(
+  name="graylog-tls"
+  type="omfwd"
+  target="@TARGET@"
+  port="@PORT@"
+  protocol="tcp"
+  StreamDriver="gtls"
+  StreamDriverMode="1"
+  StreamDriverAuthMode="x509/name"
+  StreamDriverPermittedPeers="@TARGET@"
+  template="RSYSLOG_SyslogProtocol23Format"
+  queue.type="LinkedList"
+  queue.filename="graylog_fwd"
+  queue.maxDiskSpace="@QUEUE_SIZE@"
+  queue.saveOnShutdown="on"
+  queue.size="100000"
+  action.resumeRetryCount="-1"
+  action.resumeInterval="10"
+)

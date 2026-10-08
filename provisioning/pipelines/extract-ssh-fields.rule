@@ -1,0 +1,10 @@
+rule "extract ssh failed login fields"
+when
+  has_field("message") &&
+  regex("(?:Failed password for (?:invalid user )?|Invalid user )(\\S+) from (\\S+)", to_string($message.message)).matches == true
+then
+  let m = regex("(?:Failed password for (?:invalid user )?|Invalid user )(\\S+) from (\\S+)", to_string($message.message));
+  set_field("ssh_user", to_string(m["0"]));
+  set_field("ssh_src_ip", to_string(m["1"]));
+  set_field("ssh_event", "auth_failure");
+end

@@ -1,0 +1,114 @@
+# Graylog central logging stack: Graylog + OpenSearch + MongoDB (single node).
+#
+#   scripts/init-env.sh            # writes .env (mode 0600) with random secrets
+#   scripts/gen-certs.sh server graylog.example.com
+#   docker compose up -d --wait
+#   scripts/provision.sh              # inputs, streams, pipeline, alert definitions
+#
+# Required secrets have no defaults: compose fails with a clear message while they are unset.
+# Only the web interface (loopback) and the log inputs are published; MongoDB and OpenSearch
+# stay on the internal network.
+name: graylog-central-logging
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mongodb:
+    image: mongo:8.0.32
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_ROOT_PASSWORD:?set MONGODB_ROOT_PASSWORD in .env (see .env.example)}
+      MONGODB_GRAYLOG_PASSWORD: ${MONGODB_GRAYLOG_PASSWORD:?set MONGODB_GRAYLOG_PASSWORD in .env (see .env.example)}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.6
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms${OPENSEARCH_HEAP:-1g} -Xmx${OPENSEARCH_HEAP:-1g}"
+      bootstrap.memory_lock: "true"
+      discovery.type: single-node
+      action.auto_create_index: "false"
+      # Not published outside the internal network; Graylog is the only client.
+      plugins.security.disabled: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow\\&timeout=5s >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+  graylog:
+    image: graylog/graylog:7.1.10
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      mongodb: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
+    environment:
+      GRAYLOG_NODE_ID_FILE: /usr/share/graylog/data/data/node-id
+      GRAYLOG_PASSWORD_SECRET: ${GRAYLOG_PASSWORD_SECRET:?set GRAYLOG_PASSWORD_SECRET in .env (see .env.example)}
+      GRAYLOG_ROOT_PASSWORD_SHA2: ${GRAYLOG_ROOT_PASSWORD_SHA2:?set GRAYLOG_ROOT_PASSWORD_SHA2 in .env (see .env.example)}
+      GRAYLOG_HTTP_BIND_ADDRESS: 0.0.0.0:9000
+      GRAYLOG_HTTP_EXTERNAL_URI: ${GRAYLOG_HTTP_EXTERNAL_URI:-http://127.0.0.1:9000/}
+      GRAYLOG_ELASTICSEARCH_HOSTS: http://opensearch:9200
+      GRAYLOG_MONGODB_URI: mongodb://graylog:${MONGODB_GRAYLOG_PASSWORD:?set MONGODB_GRAYLOG_PASSWORD in .env}@mongodb:27017/graylog?authSource=graylog
+      GRAYLOG_TELEMETRY_ENABLED: "false"
+      GRAYLOG_VERSIONCHECKS: "false"
+      GRAYLOG_ROOT_TIMEZONE: UTC
+    volumes:
+      - graylog_data:/usr/share/graylog/data/data
+      - graylog_journal:/usr/share/graylog/data/journal
+      # Server certificate, key and CA for the TLS inputs (created by scripts/gen-certs.sh)
+      - ./certs/server:/usr/share/graylog/certs:ro
+    ports:
+      # Web interface and REST API: loopback only; publish through a TLS reverse proxy.
+      - "127.0.0.1:9000:9000/tcp"
+      # TLS inputs for clients (syslog over TLS, GELF over TLS)
+      - "${INPUT_BIND_ADDRESS:-127.0.0.1}:6514:6514/tcp"
+      - "${INPUT_BIND_ADDRESS:-127.0.0.1}:12201:12201/tcp"
+      # Plain-text UDP inputs for local relays and legacy devices: loopback only.
+      - "127.0.0.1:1514:1514/udp"
+      - "127.0.0.1:12201:12201/udp"
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/api/system/lbstatus | grep -q ALIVE"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+networks:
+  backend:
+
+volumes:
+  mongodb_data:
+  mongodb_config:
+  opensearch_data:
+  graylog_data:
+  graylog_journal:

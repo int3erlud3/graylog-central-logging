@@ -1,0 +1,56 @@
+{
+  "_comment": "Graylog inputs created by scripts/provision.sh. Missing configuration fields are filled with the defaults reported by the Graylog API for each input type. TLS paths are inside the graylog container (./certs/server is mounted there read-only).",
+  "inputs": [
+    {
+      "title": "Syslog TCP/TLS (6514)",
+      "type": "org.graylog2.inputs.syslog.tcp.SyslogTCPInput",
+      "configuration": {
+        "bind_address": "0.0.0.0",
+        "port": 6514,
+        "tls_enable": true,
+        "tls_cert_file": "/usr/share/graylog/certs/graylog.pem",
+        "tls_key_file": "/usr/share/graylog/certs/graylog.key",
+        "tls_client_auth": "disabled",
+        "tls_client_auth_cert_file": "/usr/share/graylog/certs/ca.pem",
+        "store_full_message": true,
+        "allow_override_date": true,
+        "expand_structured_data": false,
+        "force_rdns": false
+      }
+    },
+    {
+      "title": "GELF TCP/TLS (12201)",
+      "type": "org.graylog2.inputs.gelf.tcp.GELFTCPInput",
+      "configuration": {
+        "bind_address": "0.0.0.0",
+        "port": 12201,
+        "tls_enable": true,
+        "tls_cert_file": "/usr/share/graylog/certs/graylog.pem",
+        "tls_key_file": "/usr/share/graylog/certs/graylog.key",
+        "tls_client_auth": "disabled",
+        "tls_client_auth_cert_file": "/usr/share/graylog/certs/ca.pem",
+        "use_null_delimiter": true
+      }
+    },
+    {
+      "title": "Syslog UDP (1514, local relay only)",
+      "type": "org.graylog2.inputs.syslog.udp.SyslogUDPInput",
+      "configuration": {
+        "bind_address": "0.0.0.0",
+        "port": 1514,
+        "store_full_message": true,
+        "allow_override_date": true,
+        "expand_structured_data": false,
+        "force_rdns": false
+      }
+    },
+    {
+      "title": "GELF UDP (12201, local only)",
+      "type": "org.graylog2.inputs.gelf.udp.GELFUDPInput",
+      "configuration": {
+        "bind_address": "0.0.0.0",
+        "port": 12201
+      }
+    }
+  ]
+}

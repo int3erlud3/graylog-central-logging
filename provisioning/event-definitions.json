@@ -1,0 +1,77 @@
+{
+  "_comment": "Graylog event definitions (alerts). 'streams' lists stream titles from streams.json; scripts/provision.sh resolves them to IDs. Priority: 1 low, 2 normal, 3 high. Add notifications (e-mail, Slack, HTTP) in the web interface or via the API and attach them to these definitions.",
+  "event_definitions": [
+    {
+      "title": "SSH brute force: 5+ failed logins on one host in 5 minutes",
+      "description": "Many failed SSH logins against the same host. Check ssh_src_ip and ssh_user in the matching messages; block the source or verify key-only authentication.",
+      "priority": 3,
+      "alert": true,
+      "streams": ["Security: SSH authentication"],
+      "query": "message:\"Failed password\" OR message:\"Invalid user\"",
+      "group_by": ["source"],
+      "threshold": { "type": "count", "operator": ">=", "value": 5 },
+      "search_within_minutes": 5,
+      "execute_every_minutes": 1
+    },
+    {
+      "title": "SSH: failed login for root",
+      "description": "Someone tried to log in as root over SSH. PermitRootLogin should be 'no' or 'prohibit-password'.",
+      "priority": 2,
+      "alert": true,
+      "streams": ["Security: SSH authentication"],
+      "query": "message:\"Failed password for root\"",
+      "group_by": [],
+      "threshold": null,
+      "search_within_minutes": 5,
+      "execute_every_minutes": 1
+    },
+    {
+      "title": "sudo: command executed",
+      "description": "A command was run with sudo. Review sudo_user, sudo_target_user and sudo_command; expected for administrators, unexpected for service accounts.",
+      "priority": 1,
+      "alert": true,
+      "streams": ["Security: privilege escalation"],
+      "query": "application_name:sudo AND message:\"COMMAND=\"",
+      "group_by": [],
+      "threshold": null,
+      "search_within_minutes": 5,
+      "execute_every_minutes": 1
+    },
+    {
+      "title": "sudo: authentication failure or policy violation",
+      "description": "Wrong sudo password or a user not allowed to run sudo (NOT in sudoers / command not allowed).",
+      "priority": 3,
+      "alert": true,
+      "streams": ["Security: privilege escalation"],
+      "query": "application_name:sudo AND (message:\"incorrect password attempt\" OR message:\"NOT in sudoers\" OR message:\"command not allowed\" OR message:\"authentication failure\")",
+      "group_by": [],
+      "threshold": null,
+      "search_within_minutes": 5,
+      "execute_every_minutes": 1
+    },
+    {
+      "title": "Account: new local user created",
+      "description": "A local account was created (useradd/adduser). Verify it against a change ticket.",
+      "priority": 3,
+      "alert": true,
+      "streams": ["Security: account management"],
+      "query": "message:\"new user\"",
+      "group_by": [],
+      "threshold": null,
+      "search_within_minutes": 5,
+      "execute_every_minutes": 1
+    },
+    {
+      "title": "Account: user added to a privileged group",
+      "description": "A user was added to wheel, sudo, adm or root. These groups grant administrative access.",
+      "priority": 3,
+      "alert": true,
+      "streams": ["Security: account management"],
+      "query": "(message:\"add\" OR message:\"added\") AND (message:wheel OR message:sudo OR message:adm OR message:root)",
+      "group_by": [],
+      "threshold": null,
+      "search_within_minutes": 5,
+      "execute_every_minutes": 1
+    }
+  ]
+}

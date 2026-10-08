@@ -1,0 +1,10 @@
+rule "extract sudo command fields"
+when
+  has_field("message") &&
+  regex("^\\s*(\\S+)\\s*:.*USER=(\\S+)\\s*;\\s*COMMAND=(.*)$", to_string($message.message)).matches == true
+then
+  let m = regex("^\\s*(\\S+)\\s*:.*USER=(\\S+)\\s*;\\s*COMMAND=(.*)$", to_string($message.message));
+  set_field("sudo_user", to_string(m["0"]));
+  set_field("sudo_target_user", to_string(m["1"]));
+  set_field("sudo_command", to_string(m["2"]));
+end

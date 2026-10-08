@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# rsyslogd mock: "-N1" validation succeeds unless MOCK_RSYSLOG_FAIL=1.
+printf '%s\n' "$*" >>"${MOCK_STATE:-/tmp}/rsyslogd.log"
+if [[ ${MOCK_RSYSLOG_FAIL:-0} == 1 ]]; then
+  echo "rsyslogd: error during config processing: omfwd: unknown parameter" >&2
+  exit 1
+fi
+echo "rsyslogd: version 8.mock, config validation run (level 1), master config /etc/rsyslog.conf"

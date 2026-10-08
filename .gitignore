@@ -1,0 +1,42 @@
+# Secrets, keys, archives (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.sso
+*.jks
+cwallet.sso
+ewallet.p12
+id_rsa*
+id_ed25519*
+id_ecdsa*
+*.zip
+*.tar
+*.tar.*
+*.tgz
+*.gz
+*.bz2
+*.xz
+*.7z
+*.rar
+# Caches, builds, coverage
+.cache/
+coverage/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.log
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+# Output
+/out/
+
+# Local secrets and generated TLS material (never commit)
+/certs/

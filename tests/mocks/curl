@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Minimal Graylog REST API simulator used by tests/provision.bats in place of curl.
+# State lives in $MOCK_STATE: one JSON array per object kind, request bodies under bodies/.
+set -euo pipefail
+state=${MOCK_STATE:?MOCK_STATE not set}
+mkdir -p "$state/bodies"
+printf '%q ' "$@" >>"$state/argv.log"; echo >>"$state/argv.log"
+
+out="" wfmt="" method=GET data="" cfg="" url=""
+while (($#)); do
+  case $1 in
+    -o) out=$2; shift 2 ;;
+    -w) wfmt=$2; shift 2 ;;
+    -X) method=$2; shift 2 ;;
+    -H|--max-time|--cacert) shift 2 ;;
+    --data-binary) data=${2#@}; shift 2 ;;
+    -K) cfg=$2; shift 2 ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+[[ -n $cfg ]] && cat "$cfg" >"$state/last-auth"
+path="/${url#*://*/}"
+code=200 body='{}'
+
+store() { [[ -f $state/$1.json ]] || echo '[]' >"$state/$1.json"; cat "$state/$1.json"; }
+add() { # add KIND TITLE -> prints new id
+  local id
+  id="$1-$(($(store "$1" | jq length) + 1))"
+  store "$1" | jq --arg t "$2" --arg i "$id" '. + [{title: $t, id: $i}]' >"$state/$1.tmp"
+  mv "$state/$1.tmp" "$state/$1.json"
+  [[ -n $data ]] && cp "$data" "$state/bodies/$id.json"
+  printf '%s' "$id"
+}
+
+if [[ ${MOCK_AUTH_FAIL:-0} == 1 && $path == /api/system ]]; then
+  code=401 body='{"type":"ApiError","message":"Unauthorized"}'
+else
+  case "$method $path" in
+    "GET /api/system/lbstatus") body=ALIVE ;;
+    "GET /api/system") body='{"version":"7.1.10+mock"}' ;;
+    "GET /api/system/inputs")
+      body=$(store input | jq --arg pre "${MOCK_EXISTING_INPUT:-}" '{inputs: (. + (if $pre == "" then [] else [{title: $pre, id: "pre"}] end))}') ;;
+    "GET /api/system/inputs/types/"*)
+      body='{"requested_configuration":{"recv_buffer_size":{"default_value":1048576},"number_worker_threads":{"default_value":2},"override_source":{"default_value":null},"port":{"default_value":514},"tls_client_auth":{"default_value":"disabled"}}}' ;;
+    "POST /api/system/inputs")
+      if [[ -n ${MOCK_FAIL_INPUT:-} ]]; then code=400 body='{"type":"ApiError","message":"Missing configuration field"}'
+      else code=201 body="{\"id\":\"$(add input "$(jq -r .title "$data")")\"}"; fi ;;
+    "GET /api/system/inputstates")
+      body=$(store input | jq --arg bad "${MOCK_FAILED_INPUT:-}" '{states: map({state: (if .title == $bad then "FAILED" else "RUNNING" end), message_input: {title: .title}})}') ;;
+    "GET /api/streams") body=$(store stream | jq '{streams: .}') ;;
+    "GET /api/system/indices/index_sets"*)
+      body='{"index_sets":[{"id":"ix-other","default":false},{"id":"ix-default","default":true}]}' ;;
+    "POST /api/streams") code=201 body="{\"stream_id\":\"$(add stream "$(jq -r .title "$data")")\"}" ;;
+    "POST /api/streams/"*/resume) code=204 body=''; echo "${path#/api/streams/}" >>"$state/resumed" ;;
+    "GET /api/system/pipelines/rule") body=$(store rule) ;;
+    "POST /api/system/pipelines/rule")
+      t=$(jq -r .source "$data" | sed -n 's/^rule "\(.*\)".*/\1/p' | head -n1)
+      body="{\"id\":\"$(add rule "$t")\"}" ;;
+    "GET /api/system/pipelines/pipeline") body=$(store pipeline) ;;
+    "POST /api/system/pipelines/pipeline")
+      t=$(jq -r .source "$data" | sed -n 's/^pipeline "\(.*\)".*/\1/p' | head -n1)
+      body="{\"id\":\"$(add pipeline "$t")\"}" ;;
+    "GET /api/system/pipelines/connections/"*) code=404 body='{"type":"ApiError","message":"not found"}' ;;
+    "POST /api/system/pipelines/connections/to_stream")
+      cp "$data" "$state/bodies/connection-$(jq -r .stream_id "$data").json"; body='{}' ;;
+    "GET /api/events/definitions"*) body=$(store event | jq '{event_definitions: .}') ;;
+    "POST /api/events/definitions"*) body="{\"id\":\"$(add event "$(jq -r .title "$data")")\"}" ;;
+    *) code=404 body='{"type":"ApiError","message":"mock: unknown endpoint"}' ;;
+  esac
+fi
+
+if [[ -n $out ]]; then printf '%s' "$body" >"$out"; else printf '%s' "$body"; fi
+[[ -n $wfmt ]] && printf '%s' "$code"
+exit 0

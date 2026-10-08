@@ -1,0 +1,11 @@
+{
+  "_comment": "Pipelines enrich the security streams with fields used for grouping and investigation. Rule sources are in provisioning/pipelines/*.rule.",
+  "pipelines": [
+    {
+      "title": "Security field extraction",
+      "description": "Extracts ssh_user/ssh_src_ip from failed SSH logins and sudo_user/sudo_command from sudo",
+      "rules": ["extract-ssh-fields.rule", "extract-sudo-fields.rule"],
+      "streams": ["Security: SSH authentication", "Security: privilege escalation"]
+    }
+  ]
+}

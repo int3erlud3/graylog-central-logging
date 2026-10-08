@@ -1,0 +1,38 @@
+{
+  "_comment": "Stream rule types (Graylog StreamRuleType): 1 exact match, 2 regular expression, 6 contains. Streams are routed on the syslog field application_name set by the syslog inputs.",
+  "streams": [
+    {
+      "title": "Security: SSH authentication",
+      "description": "Messages from sshd (logins, failures, invalid users, disconnects)",
+      "matching_type": "AND",
+      "remove_matches_from_default_stream": false,
+      "rules": [
+        { "field": "application_name", "type": 1, "value": "sshd", "inverted": false, "description": "sshd messages" }
+      ]
+    },
+    {
+      "title": "Security: privilege escalation",
+      "description": "sudo and su usage, including failed attempts",
+      "matching_type": "AND",
+      "remove_matches_from_default_stream": false,
+      "rules": [
+        { "field": "application_name", "type": 2, "value": "^(sudo|su)$", "inverted": false, "description": "sudo or su" }
+      ]
+    },
+    {
+      "title": "Security: account management",
+      "description": "Local user and group changes (useradd, usermod, userdel, groupadd, gpasswd, passwd, chpasswd)",
+      "matching_type": "AND",
+      "remove_matches_from_default_stream": false,
+      "rules": [
+        {
+          "field": "application_name",
+          "type": 2,
+          "value": "^(useradd|usermod|userdel|groupadd|groupmod|groupdel|gpasswd|passwd|chpasswd|adduser|deluser)$",
+          "inverted": false,
+          "description": "shadow-utils / adduser tools"
+        }
+      ]
+    }
+  ]
+}
