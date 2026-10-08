@@ -171,7 +171,7 @@ imjournal.
 | `shellcheck` for all scripts, mocks and bats files; `yamllint`; `ruff` | CI `lint` |
 | JSON syntax (`jq`) and the definitions validator (`scripts/validate-definitions.py`: references, unique titles and ports, TLS required on TCP inputs) | CI `lint` |
 | `docker compose config` must fail without secrets or with the empty `.env.example`, must pass with them, and every image must be pinned | CI `lint` |
-| 35 bats tests: provisioning against a simulated API (request bodies, idempotency, credential handling), secrets, certificates, client installer with AppArmor handling and rollback, banner | CI `test`, `bats tests/` |
+| 36 bats tests: provisioning against a simulated API (request bodies, idempotency, credential handling), secrets, certificates, client installer with AppArmor handling and rollback, banner | CI `test`, `bats tests/` |
 | End to end: stack up, provision twice, syslog and GELF over TLS, certificate name check, stream routing, pipeline fields, real rsyslog client, three alerts firing | CI `integration`, `tests/integration.sh` |
 | gitleaks over the full history | CI `security` |
 

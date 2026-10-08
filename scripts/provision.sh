@@ -202,6 +202,22 @@ api_ok() { # api_ok METHOD PATH [JSON] ; fails with the API message on non-2xx
   fi
 }
 
+# api_create PATH JSON-FILE: POST a new object. Graylog 6+ expects shareable entities
+# (streams, event definitions) wrapped as {"entity": ..., "share_request": ...}; older
+# versions take the plain object. Try plain first and wrap when the server asks for it.
+api_create() {
+  api POST "$1" "$2"
+  if [[ $HTTP_CODE == 400 ]] && jq -e '(.message // "") | test("entity cannot be null")' "$RESP" >/dev/null 2>&1; then
+    jq '{entity: ., share_request: {selected_grantee_capabilities: {}}}' "$2" >"$2.wrapped"
+    api POST "$1" "$2.wrapped"
+  fi
+  if [[ ! $HTTP_CODE =~ ^2 ]]; then
+    local msg
+    msg=$(jq -r '.message // .type // empty' "$RESP" 2>/dev/null | head -c 500 || true)
+    fail "POST $1 failed with HTTP $HTTP_CODE${msg:+: $msg}"
+  fi
+}
+
 if ((WAIT > 0)); then
   deadline=$((SECONDS + WAIT))
   until curl -fsS --max-time 5 "${CURL_TLS[@]}" "$URL/api/system/lbstatus" 2>/dev/null | grep -q ALIVE; do
@@ -252,7 +268,7 @@ if want streams; then
     if [[ -n $(stream_id "$title") ]]; then log exists stream "$title"; existing=$((existing + 1)); continue; fi
     jq --arg ix "$index_set" ".streams[$i] | {title, description, matching_type, rules,
         remove_matches_from_default_stream, index_set_id: \$ix}" "$DEFS/streams.json" >"$WORK/body"
-    api_ok POST /api/streams "$WORK/body"
+    api_create /api/streams "$WORK/body"
     id=$(jq -r '.stream_id // .id' "$RESP")
     api_ok POST "/api/streams/$id/resume"
     log created stream "$title"; created=$((created + 1))
@@ -339,7 +355,7 @@ if want events; then
        notification_settings: {grace_period_ms: 300000, backlog_size: 20},
        notifications: [],
        storage: [{type: "persist-to-streams-v1", streams: ["000000000000000000000002"]}]}' "$WORK/def" >"$WORK/body"
-    api_ok POST '/api/events/definitions?schedule=true' "$WORK/body"
+    api_create '/api/events/definitions?schedule=true' "$WORK/body"
     log created event "$title"; created=$((created + 1))
   done
 fi

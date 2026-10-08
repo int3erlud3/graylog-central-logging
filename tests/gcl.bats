@@ -13,7 +13,7 @@ setup() {
   mkdir -p "$MOCK_STATE"
   unset NO_BANNER GRAYLOG_URL GRAYLOG_API_TOKEN GRAYLOG_API_TOKEN_FILE GRAYLOG_USERNAME \
     GRAYLOG_PASSWORD GRAYLOG_PASSWORD_FILE GRAYLOG_CA_FILE MOCK_EXISTING_INPUT MOCK_FAILED_INPUT \
-    MOCK_AUTH_FAIL MOCK_FAIL_INPUT MOCK_RSYSLOG_FAIL GCL_ROOT
+    MOCK_AUTH_FAIL MOCK_FAIL_INPUT MOCK_RSYSLOG_FAIL MOCK_REQUIRE_ENTITY GCL_ROOT
   PWFILE="$BATS_TEST_TMPDIR/graylog.pw"
   printf 'Sup3r"Secret\\Pass\n' >"$PWFILE"
   chmod 600 "$PWFILE"
@@ -95,6 +95,14 @@ body() { cat "$MOCK_STATE/bodies/$1.json"; }
   [[ "$output" == *'rule "extract ssh failed login fields"'* ]]
   [ "$(jq -r '.pipeline_ids[0]' "$MOCK_STATE/bodies/connection-stream-1.json")" = pipeline-1 ]
   [ "$(jq -r '.pipeline_ids[0]' "$MOCK_STATE/bodies/connection-stream-2.json")" = pipeline-1 ]
+}
+
+@test "provision: wraps shareable entities for Graylog 6+ when the server requires it" {
+  MOCK_REQUIRE_ENTITY=1 provision
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"provision: 16 created, 0 already present"* ]]
+  [ "$(jq -r .index_set_id "$MOCK_STATE/bodies/stream-1.json")" = ix-default ]
+  [ "$(jq -r '.config.streams[0]' "$MOCK_STATE/bodies/event-1.json")" = stream-1 ]
 }
 
 @test "provision: second run is idempotent" {

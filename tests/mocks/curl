@@ -20,6 +20,16 @@ while (($#)); do
   esac
 done
 [[ -n $cfg ]] && cat "$cfg" >"$state/last-auth"
+# Graylog 6+ style: shareable entities must be wrapped as {"entity": ..., "share_request": ...}
+needs_entity=0
+if [[ ${MOCK_REQUIRE_ENTITY:-0} == 1 && $method == POST && -n $data ]] &&
+  [[ $url == */api/streams || $url == */api/events/definitions* ]]; then
+  if jq -e 'has("entity")' "$data" >/dev/null; then
+    jq .entity "$data" >"$state/unwrapped.json"; data=$state/unwrapped.json
+  else
+    needs_entity=1
+  fi
+fi
 path="/${url#*://*/}"
 code=200 body='{}'
 
@@ -33,7 +43,9 @@ add() { # add KIND TITLE -> prints new id
   printf '%s' "$id"
 }
 
-if [[ ${MOCK_AUTH_FAIL:-0} == 1 && $path == /api/system ]]; then
+if ((needs_entity)); then
+  code=400 body='{"type":"ApiError","message":"Error at \"\" [16, 1]: entity cannot be null"}'
+elif [[ ${MOCK_AUTH_FAIL:-0} == 1 && $path == /api/system ]]; then
   code=401 body='{"type":"ApiError","message":"Unauthorized"}'
 else
   case "$method $path" in
