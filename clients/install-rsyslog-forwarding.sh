@@ -110,6 +110,14 @@ fi
 PKI_DIR=/etc/pki/graylog
 CONF=/etc/rsyslog.d/60-graylog-tls.conf
 JOURNALD_CONF=/etc/systemd/journald.conf.d/90-forward-to-syslog.conf
+# Debian/Ubuntu confine rsyslogd with AppArmor; the profile only allows /etc/rsyslog.d/**,
+# so the TLS material needs an explicit read rule (RHEL/SUSE SELinux already allows /etc/pki).
+AA_PROFILE=/etc/apparmor.d/usr.sbin.rsyslogd
+AA_SNIPPET=/etc/apparmor.d/rsyslog.d/graylog-tls
+AA_LOCAL=/etc/apparmor.d/local/usr.sbin.rsyslogd
+AA_RULES="# graylog-central-logging: let rsyslogd read the TLS material for forwarding
+$PKI_DIR/ r,
+$PKI_DIR/** r,"
 
 render() {
   local cert_lines=""
@@ -139,6 +147,7 @@ if ((APPLY == 0)); then
   echo "# $PKI_DIR/ca.pem  <- $CA"
   [[ -n $CERT ]] && echo "# $PKI_DIR/client.pem, client.key (0600)  <- $CERT, $KEY"
   ((JOURNALD)) && echo "# $JOURNALD_CONF  <- clients/journald/90-forward-to-syslog.conf"
+  [[ -f $ROOT$AA_PROFILE ]] && echo "# AppArmor: read access to $PKI_DIR for rsyslogd (profile reloaded)"
   echo "# $CONF:"
   printf '%s\n' "$rendered"
   exit 0
@@ -147,14 +156,23 @@ fi
 R=$ROOT
 backup=$(mktemp -d)
 trap 'rm -rf "$backup"' EXIT
-for f in "$CONF" "$JOURNALD_CONF"; do
+MANAGED=("$CONF" "$JOURNALD_CONF" "$AA_SNIPPET" "$AA_LOCAL")
+for f in "${MANAGED[@]}"; do
   if [[ -e $R$f ]]; then mkdir -p "$backup$(dirname "$f")"; cp -p "$R$f" "$backup$f"; fi
 done
 
+reload_apparmor() {
+  [[ -f $R$AA_PROFILE && -z $ROOT ]] || return 0
+  if command -v apparmor_parser >/dev/null; then
+    apparmor_parser -r "$AA_PROFILE" || echo "warning: could not reload the rsyslogd AppArmor profile" >&2
+  fi
+}
+
 rollback() {
-  for f in "$CONF" "$JOURNALD_CONF"; do
+  for f in "${MANAGED[@]}"; do
     if [[ -e $backup$f ]]; then cp -p "$backup$f" "$R$f"; else rm -f "$R$f"; fi
   done
+  reload_apparmor
 }
 
 install -d -m 0755 "$R$PKI_DIR" "$R/etc/rsyslog.d"
@@ -171,6 +189,20 @@ if ((JOURNALD)); then
   install -d -m 0755 "$R$(dirname "$JOURNALD_CONF")"
   install -m 0644 "$SCRIPT_DIR/journald/90-forward-to-syslog.conf" "$R$JOURNALD_CONF"
   echo "installed $JOURNALD_CONF"
+fi
+
+if [[ -f $R$AA_PROFILE ]]; then
+  if grep -q 'include if exists <rsyslog.d>' "$R$AA_PROFILE"; then
+    install -d -m 0755 "$R$(dirname "$AA_SNIPPET")"
+    printf '%s\n' "$AA_RULES" >"$R$AA_SNIPPET"
+    chmod 0644 "$R$AA_SNIPPET"
+    echo "installed $AA_SNIPPET"
+  elif ! grep -qF "$PKI_DIR/** r," "$R$AA_LOCAL" 2>/dev/null; then
+    install -d -m 0755 "$R$(dirname "$AA_LOCAL")"
+    printf '%s\n' "$AA_RULES" >>"$R$AA_LOCAL"
+    echo "updated $AA_LOCAL"
+  fi
+  reload_apparmor
 fi
 
 if command -v rsyslogd >/dev/null; then

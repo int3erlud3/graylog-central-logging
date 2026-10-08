@@ -153,7 +153,10 @@ The installer does the following:
    that buffers logs while Graylog is unreachable.
 3. Installs the journald drop-in [`90-forward-to-syslog.conf`](clients/journald/90-forward-to-syslog.conf),
    which sets `ForwardToSyslog=yes` and a persistent local journal.
-4. Validates the configuration with `rsyslogd -N1` and restarts rsyslog. If validation or the
+4. On Debian/Ubuntu, where rsyslogd is confined by AppArmor, adds a read-only rule for
+   `/etc/pki/graylog/` and reloads the profile. RHEL and SUSE SELinux policies already allow
+   `/etc/pki`.
+5. Validates the configuration with `rsyslogd -N1` and restarts rsyslog. If validation or the
    restart fails, the previous files are restored.
 
 For mutual TLS, issue a client certificate with `scripts/gen-certs.sh client web01.example.com`
@@ -168,7 +171,7 @@ imjournal.
 | `shellcheck` for all scripts, mocks and bats files; `yamllint`; `ruff` | CI `lint` |
 | JSON syntax (`jq`) and the definitions validator (`scripts/validate-definitions.py`: references, unique titles and ports, TLS required on TCP inputs) | CI `lint` |
 | `docker compose config` must fail without secrets or with the empty `.env.example`, must pass with them, and every image must be pinned | CI `lint` |
-| 33 bats tests: provisioning against a simulated API (request bodies, idempotency, credential handling), secrets, certificates, client installer with rollback, banner | CI `test`, `bats tests/` |
+| 35 bats tests: provisioning against a simulated API (request bodies, idempotency, credential handling), secrets, certificates, client installer with AppArmor handling and rollback, banner | CI `test`, `bats tests/` |
 | End to end: stack up, provision twice, syslog and GELF over TLS, certificate name check, stream routing, pipeline fields, real rsyslog client, three alerts firing | CI `integration`, `tests/integration.sh` |
 | gitleaks over the full history | CI `security` |
 

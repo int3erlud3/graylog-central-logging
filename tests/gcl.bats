@@ -293,6 +293,33 @@ make_pki() {
   [ ! -e "$r/etc/systemd/journald.conf.d/90-forward-to-syslog.conf" ]
 }
 
+@test "client installer: AppArmor read rule for the TLS material on Debian/Ubuntu" {
+  make_pki
+  r="$BATS_TEST_TMPDIR/root"
+  mkdir -p "$r/etc/apparmor.d"
+  printf 'profile rsyslogd /usr/sbin/rsyslogd {\n  include if exists <rsyslog.d>\n}\n' >"$r/etc/apparmor.d/usr.sbin.rsyslogd"
+  run env PATH="$MOCKS:$PATH" GCL_ROOT="$r" "$INSTALL" --target graylog.example.test --ca "$CA" --apply
+  [ "$status" -eq 0 ]
+  grep -qx '/etc/pki/graylog/\*\* r,' "$r/etc/apparmor.d/rsyslog.d/graylog-tls"
+  # failed validation removes the rule again
+  rm -rf "$r/etc/rsyslog.d" "$r/etc/apparmor.d/rsyslog.d"
+  run env PATH="$MOCKS:$PATH" GCL_ROOT="$r" MOCK_RSYSLOG_FAIL=1 "$INSTALL" --target graylog.example.test --ca "$CA" --apply
+  [ "$status" -eq 1 ]
+  [ ! -e "$r/etc/apparmor.d/rsyslog.d/graylog-tls" ]
+}
+
+@test "client installer: older AppArmor profiles get the rule in local/ once" {
+  make_pki
+  r="$BATS_TEST_TMPDIR/root"
+  mkdir -p "$r/etc/apparmor.d"
+  printf 'profile rsyslogd /usr/sbin/rsyslogd {\n  #include <local/usr.sbin.rsyslogd>\n}\n' >"$r/etc/apparmor.d/usr.sbin.rsyslogd"
+  for _ in 1 2; do
+    run env PATH="$MOCKS:$PATH" GCL_ROOT="$r" "$INSTALL" --target graylog.example.test --ca "$CA" --apply
+    [ "$status" -eq 0 ]
+  done
+  [ "$(grep -c '/etc/pki/graylog/\*\* r,' "$r/etc/apparmor.d/local/usr.sbin.rsyslogd")" -eq 1 ]
+}
+
 @test "client installer: input validation" {
   make_pki
   run "$INSTALL" --target 'x;y' --ca "$CA"
