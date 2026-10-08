@@ -124,6 +124,9 @@ case $cmd in
     issue "$DIR/server" graylog "$1" serverAuth "$(san_list "$@")"
     install -m 644 "$DIR/ca/ca.pem" "$DIR/server/ca.pem"
     chmod 640 "$DIR/server/graylog.key"
+    # The directory is bind-mounted into the container as-is: the graylog user (uid 1100)
+    # must be able to traverse it (it holds only the public cert, the CA and the 0640 key).
+    chmod 755 "$DIR/server"
     echo "gen-certs: server certificate $DIR/server/graylog.pem for: $*" >&2
     echo "gen-certs: let the graylog container (uid 1100) read the key: sudo chown root:1100 $DIR/server/graylog.key" >&2
     ;;

@@ -52,6 +52,14 @@ tls_send() { # tls_send PORT  (payload on stdin)
     { cat "/tmp/s_client.$1.err" >&2; fail "TLS connection to port $1 failed"; }
 }
 
+# 0. Graylog silently falls back to a self-signed certificate when it cannot read the
+#    mounted key, so check access from inside the container first.
+if command -v docker >/dev/null && docker compose ps --status running graylog 2>/dev/null | grep -q graylog; then
+  docker compose exec -T graylog sh -c 'test -r /usr/share/graylog/certs/graylog.pem && test -r /usr/share/graylog/certs/graylog.key' ||
+    fail "graylog container cannot read certs/server (run gen-certs.sh server ... and chown root:1100 the key)"
+  pass "graylog container can read the TLS certificate and key"
+fi
+
 # 1. Provision (inputs must come up RUNNING with the mounted certificates)
 scripts/provision.sh --wait 300 --verify --no-banner
 scripts/provision.sh --no-banner | grep -q '0 created' || fail "second provisioning run was not idempotent"

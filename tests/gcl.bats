@@ -229,6 +229,8 @@ body() { cat "$MOCK_STATE/bodies/$1.json"; }
   [[ "$output" == *"TLS Web Server Authentication"* ]]
   [ "$(stat -c %a "$d/ca/ca.key")" = 600 ]
   [ "$(stat -c %a "$d/server/graylog.key")" = 640 ]
+  [ "$(stat -c %a "$d/server")" = 755 ]   # bind-mounted: container uid 1100 must traverse it
+  [ "$(stat -c %a "$d/ca")" = 700 ]
   [ ! -e "$d/server/ca.key" ]
   "$CERTS" --dir "$d" client web01.example.test
   run openssl x509 -in "$d/clients/web01.example.test/client.pem" -noout -ext extendedKeyUsage
