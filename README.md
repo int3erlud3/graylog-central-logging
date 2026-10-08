@@ -164,6 +164,10 @@ and pass `--client-cert/--client-key`. Systems that should read the journal dire
 [`10-imjournal.conf`](clients/rsyslog/10-imjournal.conf). RHEL-family systems already load
 imjournal.
 
+Use a DNS name that resolves to the address the inputs listen on as `--target`. Avoid `localhost`:
+it can resolve to `::1` first, while the compose file publishes the inputs on IPv4 only, so
+rsyslog reports `cannot connect ... Connection refused`.
+
 ## Testing
 
 | Check | Where |

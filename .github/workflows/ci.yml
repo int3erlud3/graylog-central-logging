@@ -96,7 +96,7 @@ jobs:
           openssl rand -base64 33 | tr -dc 'A-Za-z0-9' > "$RUNNER_TEMP/admin.pw"
           echo "::add-mask::$(cat "$RUNNER_TEMP/admin.pw")"
           scripts/init-env.sh < "$RUNNER_TEMP/admin.pw"
-          scripts/gen-certs.sh server localhost
+          scripts/gen-certs.sh server graylog.ci.test
           sudo chown root:1100 certs/server/graylog.key
       - name: Start the stack
         run: docker compose up -d --wait --wait-timeout 600
@@ -104,7 +104,10 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq rsyslog rsyslog-gnutls
-          sudo clients/install-rsyslog-forwarding.sh --target localhost --ca certs/ca/ca.pem --apply --no-banner
+          # Clients use a DNS name like in production ("localhost" may resolve to ::1 first,
+          # while the inputs are published on 127.0.0.1 only).
+          echo "127.0.0.1 graylog.ci.test" | sudo tee -a /etc/hosts
+          sudo clients/install-rsyslog-forwarding.sh --target graylog.ci.test --ca certs/ca/ca.pem --apply --no-banner
       - name: End-to-end tests
         env:
           GRAYLOG_PASSWORD_FILE: ${{ runner.temp }}/admin.pw
